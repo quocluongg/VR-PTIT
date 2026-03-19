@@ -50,12 +50,12 @@
             // Ngưỡng tan chảy (vùng nào bị ảnh hưởng)
             float meltThreshold = 1.0 - melt;
             
-            // Nếu độ nhiễu lớn hơn ngưỡng, vùng đó bắt đầu tan chảy
+            // Hiệu ứng phát sáng nham thạch mạnh hơn
             if (noise > meltThreshold) {
-              // Hòa trộn màu Trái Đất với màu nham thạch
-              // Biến nhiễu làm cho vết tan chảy nhấp nháy
               float pulse = sin(time * 0.005 + noise * 10.0) * 0.5 + 0.5;
-              gl_FragColor = vec4(mix(texColor.rgb, lavaColor * pulse, melt), texColor.a * (1.0 - melt * 0.7));
+              // Tăng độ rực rỡ cho màu dung nham
+              vec3 glowLava = lavaColor * (1.5 + pulse * 0.8);
+              gl_FragColor = vec4(mix(texColor.rgb, glowLava, melt), texColor.a * (1.0 - melt * 0.5));
             } else {
               gl_FragColor = texColor;
             }
@@ -63,11 +63,39 @@
         `
     });
     
+    // --- 2. CUSTOM SHADER CHO KHÍ QUYỂN (ATMOSPHERE) ---
+    AFRAME.registerShader('atmosphere', {
+      schema: {
+        color: {type: 'color', default: '#5d91ff'},
+        powRGB: {type: 'float', default: 2.0}
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        void main() {
+          vNormal = normalize( normalMatrix * normal );
+          vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+          vViewPosition = -mvPosition.xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        uniform vec3 color;
+        uniform float powRGB;
+        void main() {
+          float intensity = pow( 0.7 - dot( vNormal, normalize( vViewPosition ) ), powRGB );
+          gl_FragColor = vec4( color, intensity );
+        }
+      `
+    });
+
     // --- 2. CUSTOM SIMPLE PARTICLE SYSTEM ---
     AFRAME.registerComponent('simple-particles', {
       schema: {
-        color: {type: 'color', default: '#FF4500'},
-        count: {type: 'int', default: 15}
+        color: { type: 'color', default: '#FF4500' },
+        count: { type: 'int', default: 15 }
       },
       init: function () {
         this.particlePool = [];
@@ -165,7 +193,7 @@
             const hitPoint = intersection.point;
             // Gọi hàm phát hạt
             if (this.particlesEl.components['simple-particles']) {
-                this.particlesEl.components['simple-particles'].emit(hitPoint);
+              this.particlesEl.components['simple-particles'].emit(hitPoint);
             }
           }
         }
@@ -204,12 +232,19 @@
 
     <a-entity id="earth-system" position="0 1.5 -3" rotation="0 0 23.5">
 
+      <!-- Trái Đất -->
       <a-sphere id="earth" radius="1" material="shader: melting-earth; src: #earth-map; melt: 0.0;" segments-height="64"
         segments-width="64" animation="property: rotation; to: 0 360 0; loop: true; dur: 45000; easing: linear">
       </a-sphere>
 
-      <a-sphere id="clouds" radius="1.015" src="#cloud-map" transparent="true" opacity="0.4"
-        animation="property: rotation; to: 0 360 0; loop: true; dur: 30000; easing: linear">
+      <!-- Lớp Mây -->
+      <a-sphere id="clouds" radius="1.015" src="#cloud-map" transparent="true" opacity="0.5"
+        animation="property: rotation; to: 0 360 0; loop: true; dur: 35000; easing: linear">
+      </a-sphere>
+
+      <!-- HIỆU ỨNG KHÍ QUYỂN (Atmosphere) -->
+      <a-sphere id="atmosphere" radius="1.08" material="shader: atmosphere; color: #4fa3ff; powRGB: 3.0;"
+        transparent="true" side="back">
       </a-sphere>
 
     </a-entity>
@@ -218,8 +253,13 @@
     <a-entity id="melt-particles" simple-particles="color: #FF8c00; count: 20"></a-entity>
 
 
-    <a-light type="directional" position="5 3 2" intensity="1.2" target="#earth-system"></a-light>
-    <a-light type="ambient" intensity="0.3"></a-light>
+    <!-- ÁNH SÁNG CẢI THIỆN -->
+    <!-- Mặt trời: Sáng hơn, ấm hơn -->
+    <a-light type="directional" position="10 10 10" color="#fff5d1" intensity="1.5" target="#earth-system"></a-light>
+    <!-- Ánh sáng môi trường: Màu xanh sâu thẳm -->
+    <a-light type="ambient" color="#1a237e" intensity="0.4"></a-light>
+    <!-- Một chút ánh sáng hắt từ bên dưới -->
+    <a-light type="point" position="-5 -3 -2" color="#3f51b5" intensity="0.5"></a-light>
 
     <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
 
@@ -227,9 +267,6 @@
       input-listen>
 
       <a-entity line="start: 0 0 0; end: 0 0 -20; color: #FF0000; opacity: 1; width: 6"></a-entity>
-
-      <a-entity line="start: 0 0 0; end: 0 0 -20; color: #FFA500; opacity: 0.3; width: 15"></a-entity>
-
       <a-entity
         gltf-model="url(https://cdn.aframe.io/controllers/oculus/oculus-touch-controller-right.gltf)"></a-entity>
     </a-entity>
