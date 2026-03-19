@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>Đồ án VR: Trái Đất Tan Chảy - Quốc PTIT</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-particle-system-component@1.1.3/dist/aframe-particle-system-component.min.js"></script>
     <script src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
     
     <script>
@@ -64,38 +65,58 @@
 
       // --- 2. HỆ THỐNG ĐIỀU KHIỂN LASER & TAN CHẢY ---
       AFRAME.registerComponent('laser-melt-logic', {
-        init: function () {
-          this.isMelting = false;
-          this.meltValue = 0.0;
-          this.earthEl = document.querySelector('#earth');
-          
-          // Lắng nghe sự kiện khi laser chiếu vào Trái Đất
-          this.el.addEventListener('raycaster-intersection', (evt) => {
-            if (evt.detail.els.includes(this.earthEl)) {
-              this.isMelting = true;
-            }
-          });
+  init: function () {
+    this.isMelting = false;
+    this.meltValue = 0.0;
+    this.earthEl = document.querySelector('#earth');
+    this.particlesEl = document.querySelector('#melt-particles'); // Lấy reference tới hệ thống hạt
 
-          // Lắng nghe sự kiện khi laser rời khỏi Trái Đất
-          this.el.addEventListener('raycaster-intersection-cleared', (evt) => {
-            this.isMelting = false;
-          });
-        },
+    // Lắng nghe sự kiện khi laser chiếu vào Trái Đất
+    this.el.addEventListener('raycaster-intersection', (evt) => {
+      if (evt.detail.els.includes(this.earthEl)) {
+        this.isMelting = true;
+        // Bật hiệu ứng hạt
+        this.particlesEl.setAttribute('visible', true);
+        this.particlesEl.setAttribute('particle-system', 'enabled', true);
+      }
+    });
 
-        // Chạy mỗi khung hình để cập nhật độ tan chảy
-        tick: function (time, timeDelta) {
-          if (this.isMelting && this.meltValue < 1.0) {
-            this.meltValue += timeDelta * 0.0002; // Tốc độ tan chảy (tăng)
-          } else if (!this.isMelting && this.meltValue > 0.0) {
-            this.meltValue -= timeDelta * 0.0001; // Tốc độ tự phục hồi (giảm chậm)
-          }
+    // Lắng nghe sự kiện khi laser rời khỏi Trái Đất
+    this.el.addEventListener('raycaster-intersection-cleared', (evt) => {
+      this.isMelting = false;
+      // Tắt hiệu ứng hạt
+      this.particlesEl.setAttribute('visible', false);
+      this.particlesEl.setAttribute('particle-system', 'enabled', false);
+    });
+  },
 
-          // Cập nhật biến 'melt' vào Shader của Trái Đất
-          if (this.earthEl.getObject3D('mesh')) {
-            this.earthEl.setAttribute('material', 'melt', this.meltValue);
-          }
-        }
-      });
+  // Chạy mỗi khung hình
+  tick: function (time, timeDelta) {
+    // 1. Logic tan chảy (giữ nguyên)
+    if (this.isMelting && this.meltValue < 1.0) {
+      this.meltValue += timeDelta * 0.0002; 
+    } else if (!this.isMelting && this.meltValue > 0.0) {
+      this.meltValue -= timeDelta * 0.0001; 
+    }
+
+    if (this.earthEl.getObject3D('mesh')) {
+      this.earthEl.setAttribute('material', 'melt', this.meltValue);
+    }
+
+    // 2. Logic hiệu ứng hạt: Cập nhật vị trí điểm va chạm
+    if (this.isMelting) {
+      const raycaster = this.el.components.raycaster;
+      const intersection = raycaster.getIntersection(this.earthEl);
+
+      if (intersection) {
+        // Lấy vị trí va chạm trong không gian thế giới
+        const hitPoint = intersection.point;
+        // Di chuyển thực thể chứa hạt đến điểm va chạm
+        this.particlesEl.object3D.position.copy(hitPoint);
+      }
+    }
+  }
+});
     </script>
   </head>
   <body style="background-color: black;">
@@ -131,17 +152,52 @@
         
       </a-entity>
 
+      <a-entity id="melt-particles" 
+          position="0 0 0" 
+          visible="false">
+    <a-entity particle-system="
+        preset: dust; 
+        color: #FF4500, #FFE4B5; 
+        size: 0.1, 0.02; 
+        velocityValue: 0 2 0; 
+        velocitySpread: 1 1 1; 
+        accelerationValue: 0 -1 0; 
+        particleCount: 100; 
+        lifetime: 1; 
+        enabled: false;
+        texture: https://cdn.aframe.io/images/textures/particle.png;
+    "></a-entity>
+
+    <a-entity particle-system="
+        preset: vapor; 
+        color: #808080, #C0C0C0; 
+        size: 0.5, 1; 
+        velocityValue: 0 0.5 0; 
+        velocitySpread: 0.2 0.2 0.2; 
+        particleCount: 50; 
+        lifetime: 2; 
+        enabled: false;
+        texture: https://cdn.aframe.io/images/textures/particle.png;
+    "></a-entity>
+</a-entity>
+
       <a-light type="directional" position="5 3 2" intensity="1.2" target="#earth-system"></a-light>
       <a-light type="ambient" intensity="0.3"></a-light>
 
       <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
 
       <a-entity id="right-hand"
-                oculus-touch-controls="hand: right"
-                laser-controls="hand: right"
-                raycaster="objects: #earth; showLine: true; far: 10"
-                line="color: #FF0000; opacity: 0.8"
-                laser-melt-logic> </a-entity>
+          laser-controls="hand: right"
+          raycaster="objects: #earth; far: 20;"
+          laser-melt-logic
+          input-listen>
+  
+          <a-entity line="start: 0 0 0; end: 0 0 -20; color: #FF0000; opacity: 1; width: 6"></a-entity>
+    
+          <a-entity line="start: 0 0 0; end: 0 0 -20; color: #FFA500; opacity: 0.3; width: 15"></a-entity>
+
+          <a-entity gltf-model="url(https://cdn.aframe.io/controllers/oculus/oculus-touch-controller-right.gltf)"></a-entity>
+      </a-entity>
 
     </a-scene>
   </body>
