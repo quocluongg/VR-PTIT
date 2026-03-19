@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Đồ án VR: Trái Đất Tan Chảy - Quốc PTIT</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
+    
+    <script>
+      // --- 1. ĐĂNG KÝ CUSTOM SHADER CHO HIỆU ỨNG TAN CHẢY ---
+      // Shader này sẽ thay đổi màu sắc và độ trong suốt của Trái Đất dựa trên một biến 'melt'
+      AFRAME.registerShader('melting-earth', {
+        schema: {
+          src: {type: 'map', is: 'uniform'},         // Texture Trái Đất
+          melt: {type: 'float', is: 'uniform', default: 0.0}, // Mức độ tan chảy (0.0 -> 1.0)
+          time: {type: 'time', is: 'uniform'}        // Thời gian để tạo hiệu ứng nhấp nháy
+        },
+
+        // Vertex Shader (Giữ nguyên vị trí các điểm)
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+
+        // Fragment Shader (Xử lý màu sắc và tan chảy)
+        fragmentShader: `
+          varying vec2 vUv;
+          uniform sampler2D src;
+          uniform float melt;
+          uniform float time;
+
+          // Hàm tạo nhiễu ngẫu nhiên
+          float rand(vec2 co){
+              return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+          }
+
+          void main() {
+            vec4 texColor = texture2D(src, vUv);
+            
+            // Màu nham thạch (Vàng cam)
+            vec3 lavaColor = vec3(1.0, 0.4, 0.0);
+            
+            // Tạo nhiễu dựa trên vị trí và thời gian để vết tan chảy không đều
+            float noise = rand(vUv + time * 0.0001);
+            
+            // Ngưỡng tan chảy (vùng nào bị ảnh hưởng)
+            float meltThreshold = 1.0 - melt;
+            
+            // Nếu độ nhiễu lớn hơn ngưỡng, vùng đó bắt đầu tan chảy
+            if (noise > meltThreshold) {
+              // Hòa trộn màu Trái Đất với màu nham thạch
+              // Biến nhiễu làm cho vết tan chảy nhấp nháy
+              float pulse = sin(time * 0.005 + noise * 10.0) * 0.5 + 0.5;
+              gl_FragColor = vec4(mix(texColor.rgb, lavaColor * pulse, melt), texColor.a * (1.0 - melt * 0.7));
+            } else {
+              gl_FragColor = texColor;
+            }
+          }
+        `
+      });
+
+      // --- 2. HỆ THỐNG ĐIỀU KHIỂN LASER & TAN CHẢY ---
+      AFRAME.registerComponent('laser-melt-logic', {
+        init: function () {
+          this.isMelting = false;
+          this.meltValue = 0.0;
+          this.earthEl = document.querySelector('#earth');
+          
+          // Lắng nghe sự kiện khi laser chiếu vào Trái Đất
+          this.el.addEventListener('raycaster-intersection', (evt) => {
+            if (evt.detail.els.includes(this.earthEl)) {
+              this.isMelting = true;
+            }
+          });
+
+          // Lắng nghe sự kiện khi laser rời khỏi Trái Đất
+          this.el.addEventListener('raycaster-intersection-cleared', (evt) => {
+            this.isMelting = false;
+          });
+        },
+
+        // Chạy mỗi khung hình để cập nhật độ tan chảy
+        tick: function (time, timeDelta) {
+          if (this.isMelting && this.meltValue < 1.0) {
+            this.meltValue += timeDelta * 0.0002; // Tốc độ tan chảy (tăng)
+          } else if (!this.isMelting && this.meltValue > 0.0) {
+            this.meltValue -= timeDelta * 0.0001; // Tốc độ tự phục hồi (giảm chậm)
+          }
+
+          // Cập nhật biến 'melt' vào Shader của Trái Đất
+          if (this.earthEl.getObject3D('mesh')) {
+            this.earthEl.setAttribute('material', 'melt', this.meltValue);
+          }
+        }
+      });
+    </script>
+  </head>
+  <body style="background-color: black;">
+    
+    <a-scene>
+      
+      <a-assets>
+        
+      </a-assets>
+        <img id="earth-map" src="./8k_earth_daymap.jpg">
+        <img id="cloud-map" src="./8k_earth_clouds.jpg">
+        <img id="star-map" src="./8k_stars.jpg">
+
+      <a-sky src="#star-map" rotation="0 -90 0"></a-sky>
+
+      <a-entity id="earth-system" position="0 1.5 -3" rotation="0 0 23.5">
+        
+        <a-sphere id="earth" 
+                  radius="1" 
+                  material="shader: melting-earth; src: #earth-map; melt: 0.0;"
+                  segments-height="64" 
+                  segments-width="64"
+                  animation="property: rotation; to: 0 360 0; loop: true; dur: 45000; easing: linear">
+        </a-sphere>
+
+        <a-sphere id="clouds" 
+                  radius="1.015" 
+                  src="#cloud-map"
+                  transparent="true" 
+                  opacity="0.4"
+                  animation="property: rotation; to: 0 360 0; loop: true; dur: 30000; easing: linear">
+        </a-sphere>
+        
+      </a-entity>
+
+      <a-light type="directional" position="5 3 2" intensity="1.2" target="#earth-system"></a-light>
+      <a-light type="ambient" intensity="0.3"></a-light>
+
+      <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
+
+      <a-entity id="right-hand"
+                oculus-touch-controls="hand: right"
+                laser-controls="hand: right"
+                raycaster="objects: #earth; showLine: true; far: 10"
+                line="color: #FF0000; opacity: 0.8"
+                laser-melt-logic> </a-entity>
+
+    </a-scene>
+  </body>
+</html>
