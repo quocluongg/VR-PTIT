@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useRef, useEffect } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { useStore, EventMode } from "@/store/useStore";
@@ -15,11 +15,14 @@ interface ButtonProps {
 }
 
 function VRButton({ position, label, color, modeId, active }: ButtonProps) {
-  const [hovered, setHovered] = useState(false);
+  const meshRef = useRef<THREE.Mesh>(null);
   const progressRef = useRef<THREE.Mesh>(null);
   const geomRef = useRef<THREE.PlaneGeometry>(null);
-  const timeInfo = useRef({ time: 0 });
+  const timeInfo = useRef({ time: 0, hovered: false });
   const setEventMode = useStore((state) => state.setEventMode);
+
+  const { camera } = useThree();
+  const raycaster = useRef(new THREE.Raycaster());
 
   const DWELL_TIME = 1.5;
 
@@ -30,12 +33,25 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
 
   const handleClick = () => {
     setEventMode(modeId);
-    setHovered(false);
     timeInfo.current.time = 0;
+    timeInfo.current.hovered = false;
   };
 
   useFrame((_, delta) => {
-    if (hovered && !active) {
+    let isGazeHovered = false;
+    
+    // Create a manual raycaster exactly from the camera's center to catch Phone VR gaze
+    if (meshRef.current) {
+      raycaster.current.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = raycaster.current.intersectObject(meshRef.current);
+      if (intersects.length > 0) {
+        isGazeHovered = true;
+      }
+    }
+
+    const currentlyHovered = isGazeHovered || timeInfo.current.hovered;
+
+    if (currentlyHovered && !active) {
       timeInfo.current.time += delta;
       if (timeInfo.current.time >= DWELL_TIME) {
         handleClick();
@@ -45,25 +61,34 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
       timeInfo.current.time = Math.max(0, timeInfo.current.time - delta * 3);
     }
 
+    // Visual updates outside of React state loop for ultra performance
     if (progressRef.current) {
       const p = Math.min(1, Math.max(0.001, timeInfo.current.time / DWELL_TIME));
       progressRef.current.scale.x = p;
+    }
+
+    if (meshRef.current) {
+      const mat = meshRef.current.material as THREE.MeshBasicMaterial;
+      if (active) {
+        mat.color.set(color);
+      } else if (currentlyHovered) {
+        mat.color.set("#444444");
+      } else {
+        mat.color.set("#222222");
+      }
     }
   });
 
   return (
     <group position={position}>
       <mesh
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => { setHovered(false); }}
+        ref={meshRef}
+        onPointerEnter={() => { timeInfo.current.hovered = true; }}
+        onPointerLeave={() => { timeInfo.current.hovered = false; }}
         onClick={handleClick}
       >
         <planeGeometry args={[1.5, 0.4]} />
-        <meshBasicMaterial 
-          color={active ? color : (hovered ? "#444" : "#222")} 
-          transparent 
-          opacity={0.8} 
-        />
+        <meshBasicMaterial color={active ? color : "#222222"} transparent opacity={0.8} />
       </mesh>
       
       {/* Loading Progress Bar */}
@@ -75,7 +100,7 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
       <Text 
         position={[0, 0, 0.02]} 
         fontSize={0.15} 
-        color={active ? "white" : "#ccc"} 
+        color={active ? "white" : "#cccccc"} 
         anchorX="center" 
         anchorY="middle"
       >
@@ -96,7 +121,9 @@ export default function VRUI() {
   ];
 
   return (
-    <group position={[2.5, 0, -3]} rotation={[0, -Math.PI / 6, 0]}>
+    // Put UI completely to the right so it doesn't overlap the Earth. 
+    // The group in Scene.tsx is at Z=-5, so Z=0 relative is fine!
+    <group position={[4, 0, 0]} rotation={[0, -Math.PI / 8, 0]}>
       {/* Title */}
       <Text position={[0, 1, 0]} fontSize={0.25} color="white" anchorX="center" anchorY="middle">
         MENU SU KIEN
