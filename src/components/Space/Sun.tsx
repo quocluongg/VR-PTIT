@@ -70,10 +70,13 @@ export default function Sun() {
 
       {/* Point light that illuminates Earth, Moon, etc. */}
       <pointLight
+        castShadow
         intensity={6000}
         distance={300}
         decay={2}
         color="#fff5e0"
+        shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.0001}
       />
     </group>
   );

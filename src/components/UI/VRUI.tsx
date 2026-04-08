@@ -120,6 +120,13 @@ export default function VRUI() {
     { id: 'blood_moon', label: 'Trang Mau', color: '#ef4444' },
   ];
 
+  const eventDescriptions: Record<EventMode, string> = {
+    normal: "He Trai Dat va Mat Trang quay tu nhien tren quy dao cua minh.",
+    solar_eclipse: "Mat Trang nam giua Trai Dat va Mat Troi, che khuat anh sang va do bong den hoan toan len bề mặt Trai Dat.",
+    lunar_eclipse: "Trai Dat nam giua che khuat anh sang tu Mat Troi, khien Mat Trang chim hoan toan vao bong toi.",
+    blood_moon: "Trong Nguyet Thuc TOAN PHAN, anh sang xuyen qua khi quyen Trai Dat bi tan xa doi mau khien Mat Trang co mau do.",
+  };
+
   return (
     // Put UI completely to the right so it doesn't overlap the Earth. 
     // The group in Scene.tsx is at Z=-5, so Z=0 relative is fine!
@@ -139,6 +146,35 @@ export default function VRUI() {
           active={eventMode === evt.id}
         />
       ))}
+
+      {/* Description Panel */}
+      <group position={[0, -1.8, 0]}>
+        <mesh position={[0, 0, -0.01]}>
+          <planeGeometry args={[2.5, 1.2]} />
+          <meshBasicMaterial color="#111111" transparent opacity={0.8} />
+        </mesh>
+        <Text
+          position={[0, 0.4, 0]}
+          fontSize={0.14}
+          color="#00ffcc"
+          anchorX="center"
+          anchorY="top"
+        >
+          THONG TIN
+        </Text>
+        <Text
+          position={[0, 0.1, 0]}
+          fontSize={0.11}
+          lineHeight={1.5}
+          color="#cccccc"
+          maxWidth={2.2}
+          textAlign="center"
+          anchorX="center"
+          anchorY="top"
+        >
+          {eventDescriptions[eventMode]}
+        </Text>
+      </group>
     </group>
   );
 }

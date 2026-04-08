@@ -116,6 +116,12 @@ export default function Earth() {
           <meshStandardMaterial color="#1a5b82" />
         )}
       </mesh>
+      
+      {/* Invisible shadow receiver shell slightly larger than Earth's surface */}
+      <mesh receiveShadow>
+        <sphereGeometry args={[1.005, 64, 64]} />
+        <shadowMaterial transparent opacity={0.7} />
+      </mesh>
 
       <Atmosphere />
       <Clouds cloudsMap={cloudsMap} />

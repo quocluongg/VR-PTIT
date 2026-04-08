@@ -71,7 +71,7 @@ export default function Moon() {
   });
 
   return (
-    <mesh ref={moonRef}>
+    <mesh ref={moonRef} castShadow receiveShadow>
       <sphereGeometry args={[0.27, 32, 32]} />
       {moonTexture ? (
         <meshPhongMaterial

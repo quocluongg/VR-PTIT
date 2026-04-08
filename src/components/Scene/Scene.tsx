@@ -16,6 +16,7 @@ export default function Scene() {
     <>
       <VRButton />
       <Canvas
+        shadows
         camera={{ position: [0, 0, 0], fov: 45 }}
         gl={{ antialias: true }}
       >
