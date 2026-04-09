@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, createPortal } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
+import { useXR } from "@react-three/xr";
 import * as THREE from "three";
 import { useStore, EventMode } from "@/store/useStore";
 
@@ -112,28 +113,28 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
 
 export default function VRUI() {
   const { eventMode } = useStore();
+  const { camera } = useThree();
   
   const events: { id: EventMode; label: string; color: string }[] = [
-    { id: 'normal', label: 'Binh Thuong', color: '#6b7280' },
-    { id: 'solar_eclipse', label: 'Nhat Thuc', color: '#eab308' },
-    { id: 'lunar_eclipse', label: 'Nguyet Thuc', color: '#a855f7' },
-    { id: 'blood_moon', label: 'Trang Mau', color: '#ef4444' },
+    { id: 'normal', label: 'Bình Thường', color: '#6b7280' },
+    { id: 'solar_eclipse', label: 'Nhật Thực', color: '#eab308' },
+    { id: 'lunar_eclipse', label: 'Nguyệt Thực', color: '#a855f7' },
+    { id: 'blood_moon', label: 'Trăng Máu', color: '#ef4444' },
   ];
 
   const eventDescriptions: Record<EventMode, string> = {
-    normal: "He Trai Dat va Mat Trang quay tu nhien tren quy dao cua minh.",
-    solar_eclipse: "Mat Trang nam giua Trai Dat va Mat Troi, che khuat anh sang va do bong den hoan toan len bề mặt Trai Dat.",
-    lunar_eclipse: "Trai Dat nam giua che khuat anh sang tu Mat Troi, khien Mat Trang chim hoan toan vao bong toi.",
-    blood_moon: "Trong Nguyet Thuc TOAN PHAN, anh sang xuyen qua khi quyen Trai Dat bi tan xa doi mau khien Mat Trang co mau do.",
+    normal: "Trái Đất và Mặt Trăng quay tự nhiên trên quỹ đạo của mình.",
+    solar_eclipse: "Mặt Trăng nằm giữa Trái Đất và Mặt Trời, che khuất ánh sáng và đổ bóng đen hoàn toàn lên bề mặt Trái Đất.",
+    lunar_eclipse: "Trái Đất nằm giữa che khuất ánh sáng từ Mặt Trời, khiến Mặt Trăng chìm hoàn toàn vào bóng tối.",
+    blood_moon: "Trong Nguyệt Thực toàn phần, ánh sáng xuyên qua khí quyển Trái Đất bị tán xạ đỏ khiến Mặt Trăng có màu đỏ.",
   };
 
-  return (
-    // Put UI completely to the right so it doesn't overlap the Earth. 
-    // The group in Scene.tsx is at Z=-5, so Z=0 relative is fine!
-    <group position={[4, 0, 0]} rotation={[0, -Math.PI / 8, 0]}>
+  // Render UI in camera space instead of world space
+  return createPortal(
+    <group position={[0, 0, -2.5]}>
       {/* Title */}
-      <Text position={[0, 1, 0]} fontSize={0.25} color="white" anchorX="center" anchorY="middle">
-        MENU SU KIEN
+      <Text position={[0, 1.2, 0]} fontSize={0.3} color="white" anchorX="center" anchorY="middle">
+        MENU SỰ KIỆN
       </Text>
       
       {events.map((evt, idx) => (
@@ -142,13 +143,13 @@ export default function VRUI() {
           modeId={evt.id}
           label={evt.label}
           color={evt.color}
-          position={[0, 0.4 - idx * 0.45, 0]}
+          position={[0, 0.5 - idx * 0.45, 0]}
           active={eventMode === evt.id}
         />
       ))}
 
       {/* Description Panel */}
-      <group position={[0, -1.8, 0]}>
+      <group position={[0, -1.6, 0]}>
         <mesh position={[0, 0, -0.01]}>
           <planeGeometry args={[2.5, 1.2]} />
           <meshBasicMaterial color="#111111" transparent opacity={0.8} />
@@ -160,7 +161,7 @@ export default function VRUI() {
           anchorX="center"
           anchorY="top"
         >
-          THONG TIN
+          THÔNG TIN
         </Text>
         <Text
           position={[0, 0.1, 0]}
@@ -175,6 +176,7 @@ export default function VRUI() {
           {eventDescriptions[eventMode]}
         </Text>
       </group>
-    </group>
+    </group>,
+    camera
   );
 }

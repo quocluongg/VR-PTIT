@@ -9,6 +9,7 @@ import Moon from "@/components/Space/Moon";
 import Sun from "@/components/Space/Sun";
 import VRUI from "@/components/UI/VRUI";
 import VRCursor from "@/components/UI/VRCursor";
+import VRControllerInteraction from "@/components/Controls/VRControllerInteraction";
 import { Suspense } from "react";
 
 export default function Scene() {
@@ -23,6 +24,7 @@ export default function Scene() {
         <XR>
           <Controllers />
           <VRCursor />
+          <VRControllerInteraction />
           
           <color attach="background" args={["#000000"]} />
           <ambientLight intensity={0.15} />
