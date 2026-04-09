@@ -23,6 +23,7 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
   const setEventMode = useStore((state) => state.setEventMode);
 
   const { camera } = useThree();
+  const { controllers } = useXR();
   const raycaster = useRef(new THREE.Raycaster());
 
   const DWELL_TIME = 1.5;
@@ -50,7 +51,24 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
       }
     }
 
-    const currentlyHovered = isGazeHovered || timeInfo.current.hovered;
+    // Check for controller raycasting
+    let isControllerHovered = false;
+    if (meshRef.current && controllers.length > 0) {
+      controllers.forEach((controller) => {
+        if (controller) {
+          raycaster.current.ray.origin.copy(controller.position);
+          raycaster.current.ray.direction.copy(
+            new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion)
+          );
+          const intersects = raycaster.current.intersectObject(meshRef.current!);
+          if (intersects.length > 0) {
+            isControllerHovered = true;
+          }
+        }
+      });
+    }
+
+    const currentlyHovered = isGazeHovered || isControllerHovered || timeInfo.current.hovered;
 
     if (currentlyHovered && !active) {
       timeInfo.current.time += delta;
@@ -88,19 +106,19 @@ function VRButton({ position, label, color, modeId, active }: ButtonProps) {
         onPointerLeave={() => { timeInfo.current.hovered = false; }}
         onClick={handleClick}
       >
-        <planeGeometry args={[1.5, 0.4]} />
+        <planeGeometry args={[0.8, 0.22]} />
         <meshBasicMaterial color={active ? color : "#222222"} transparent opacity={0.8} />
       </mesh>
       
       {/* Loading Progress Bar */}
-      <mesh ref={progressRef} position={[-0.75, -0.19, 0.01]}>
-        <planeGeometry ref={geomRef} args={[1.5, 0.02]} />
+      <mesh ref={progressRef} position={[-0.4, -0.1, 0.01]}>
+        <planeGeometry ref={geomRef} args={[0.8, 0.01]} />
         <meshBasicMaterial color="#00ffcc" transparent opacity={0.9} />
       </mesh>
 
       <Text 
         position={[0, 0, 0.02]} 
-        fontSize={0.15} 
+        fontSize={0.08} 
         color={active ? "white" : "#cccccc"} 
         anchorX="center" 
         anchorY="middle"
@@ -129,11 +147,11 @@ export default function VRUI() {
     blood_moon: "Trong Nguyệt Thực toàn phần, ánh sáng xuyên qua khí quyển Trái Đất bị tán xạ đỏ khiến Mặt Trăng có màu đỏ.",
   };
 
-  // Render UI in camera space instead of world space
+  // Render UI in camera space instead of world space - positioned at bottom right
   return createPortal(
-    <group position={[0, 0, -2.5]}>
+    <group position={[0.8, -0.8, -2.5]}>
       {/* Title */}
-      <Text position={[0, 1.2, 0]} fontSize={0.3} color="white" anchorX="center" anchorY="middle">
+      <Text position={[0, 0.5, 0]} fontSize={0.12} color="white" anchorX="center" anchorY="middle">
         MENU SỰ KIỆN
       </Text>
       
@@ -143,20 +161,20 @@ export default function VRUI() {
           modeId={evt.id}
           label={evt.label}
           color={evt.color}
-          position={[0, 0.5 - idx * 0.45, 0]}
+          position={[0, 0.2 - idx * 0.25, 0]}
           active={eventMode === evt.id}
         />
       ))}
 
       {/* Description Panel */}
-      <group position={[0, -1.6, 0]}>
+      <group position={[0, -1.0, 0]}>
         <mesh position={[0, 0, -0.01]}>
-          <planeGeometry args={[2.5, 1.2]} />
+          <planeGeometry args={[1.3, 0.65]} />
           <meshBasicMaterial color="#111111" transparent opacity={0.8} />
         </mesh>
         <Text
-          position={[0, 0.4, 0]}
-          fontSize={0.14}
+          position={[0, 0.25, 0]}
+          fontSize={0.07}
           color="#00ffcc"
           anchorX="center"
           anchorY="top"
@@ -165,10 +183,10 @@ export default function VRUI() {
         </Text>
         <Text
           position={[0, 0.1, 0]}
-          fontSize={0.11}
-          lineHeight={1.5}
+          fontSize={0.055}
+          lineHeight={1.4}
           color="#cccccc"
-          maxWidth={2.2}
+          maxWidth={1.15}
           textAlign="center"
           anchorX="center"
           anchorY="top"
