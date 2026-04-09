@@ -4,12 +4,21 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useXR } from "@react-three/xr";
 import * as THREE from "three";
+import { useStore } from "@/store/useStore";
 
 export default function VRControllerInteraction() {
   const { controllers, isPresenting } = useXR();
+  const { toggleMenu } = useStore();
   const rotationRef = useRef({ x: 0, y: 0 });
   const { camera } = useThree();
   const targetGroupRef = useRef<THREE.Group | null>(null);
+  const controllerStateRef = useRef<{
+    [controllerIdx: number]: {
+      lastPos: THREE.Vector3 | null;
+      gripPressed: boolean;
+      buttonAPressed: boolean;
+    };
+  }>({});
 
   // Get the target group from the scene
   useEffect(() => {
@@ -20,51 +29,69 @@ export default function VRControllerInteraction() {
   }, [camera]);
 
   useFrame(() => {
-    if (!isPresenting || controllers.length < 2) return;
+    if (!isPresenting || controllers.length < 1) return;
 
-    const leftController = controllers[0];
-    const rightController = controllers[1];
+    controllers.forEach((controller, idx) => {
+      if (!controller) return;
 
-    if (!leftController || !rightController) return;
+      const input = controller.inputSource?.gamepad;
+      if (!input) return;
 
-    // Get analog stick input for rotation (usually on thumbstick)
-    const leftInput = leftController.inputSource?.gamepad;
-    const rightInput = rightController.inputSource?.gamepad;
-
-    if (leftInput && leftInput.axes.length >= 2) {
-      // Left controller thumbstick for rotation
-      rotationRef.current.x += leftInput.axes[0] * 0.02; // Horizontal rotation
-      rotationRef.current.y += leftInput.axes[1] * 0.02; // Vertical rotation
-    }
-
-    if (rightInput && rightInput.axes.length >= 2) {
-      // Right controller thumbstick for zoom (optional)
-      // This can be enhanced for zooming functionality
-    }
-
-    // Left controller buttons for direct rotation
-    if (leftInput && leftInput.buttons) {
-      if (leftInput.buttons[4]?.pressed) {
-        // Left grip button - rotate left
-        rotationRef.current.x -= 0.05;
+      // Initialize state for this controller if not exists
+      if (!controllerStateRef.current[idx]) {
+        controllerStateRef.current[idx] = {
+          lastPos: null,
+          gripPressed: false,
+          buttonAPressed: false,
+        };
       }
-      if (leftInput.buttons[5]?.pressed) {
-        // Right grip button - rotate right
-        rotationRef.current.x += 0.05;
-      }
-    }
 
-    // Right controller buttons for vertical rotation
-    if (rightInput && rightInput.buttons) {
-      if (rightInput.buttons[4]?.pressed) {
-        // Left grip button - rotate up
-        rotationRef.current.y -= 0.05;
+      const state = controllerStateRef.current[idx];
+
+      // ===== Button A (toggle menu) =====
+      // Button A is typically at index 4
+      const buttonAPressed = input.buttons[4]?.pressed || false;
+      
+      // Detect button A press (transition from not pressed to pressed)
+      if (buttonAPressed && !state.buttonAPressed) {
+        toggleMenu();
       }
-      if (rightInput.buttons[5]?.pressed) {
-        // Right grip button - rotate down
-        rotationRef.current.y += 0.05;
+      state.buttonAPressed = buttonAPressed;
+
+      // ===== Thumbstick rotation =====
+      if (input.axes.length >= 2) {
+        rotationRef.current.x += input.axes[0] * 0.02;
+        rotationRef.current.y += input.axes[1] * 0.02;
       }
-    }
+
+      // ===== Grip button + drag to rotate =====
+      // Button 1 is typically the grip button
+      const gripPressed = input.buttons[1]?.pressed || false;
+      
+      if (gripPressed) {
+        if (!state.gripPressed) {
+          // Grip just pressed - save starting position
+          state.lastPos = controller.position.clone();
+        } else if (state.lastPos) {
+          // Grip held - calculate delta and rotate
+          const currentPos = controller.position;
+          const deltaX = currentPos.x - state.lastPos.x;
+          const deltaY = currentPos.y - state.lastPos.y;
+          
+          // Apply rotation based on movement
+          rotationRef.current.x += deltaX * 1.5;
+          rotationRef.current.y -= deltaY * 1.5;
+          
+          // Update position for next frame
+          state.lastPos = currentPos.clone();
+        }
+      } else {
+        // Grip released
+        state.lastPos = null;
+      }
+
+      state.gripPressed = gripPressed;
+    });
 
     // Apply rotation to the scene's target group
     if (targetGroupRef.current) {
