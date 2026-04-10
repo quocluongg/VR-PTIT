@@ -36,9 +36,10 @@ export default function Scene() {
               <Earth />
               <Moon />
               <Starfield />
-              <VRUI />
             </Suspense>
           </group>
+
+          <VRUI />
 
           <VRControllerInteraction targetRef={universeRef} />
 

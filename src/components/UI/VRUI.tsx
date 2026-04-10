@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useRef, useState } from "react";
+import { useFrame, useThree, createPortal } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { useStore, EventMode } from "@/store/useStore";
-import { useController } from "@react-three/xr";
+import { useController, Interactive } from "@react-three/xr";
 
 interface ButtonProps {
   position: [number, number, number];
@@ -15,118 +15,76 @@ interface ButtonProps {
   active: boolean;
 }
 
-function VRButton({ position, label, color, modeId, active }: ButtonProps) {
+function VRMenuButton({ position, label, color, modeId, active }: ButtonProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const progressRef = useRef<THREE.Mesh>(null);
-  const geomRef = useRef<THREE.PlaneGeometry>(null);
-  const timeInfo = useRef({ time: 0, hovered: false });
+  const [hovered, setHovered] = useState(false);
   const setEventMode = useStore((state) => state.setEventMode);
 
-  const { camera } = useThree();
-  const raycaster = useRef(new THREE.Raycaster());
-
-  const DWELL_TIME = 1.5;
-
-  useEffect(() => {
-    // Translate geometry so scaling starts exactly from the left edge towards the right
-    geomRef.current?.translate(0.75, 0, 0);
-  }, []);
-
-  const handleClick = () => {
+  const handleSelect = () => {
     setEventMode(modeId);
-    timeInfo.current.time = 0;
-    timeInfo.current.hovered = false;
   };
 
-  useFrame((_, delta) => {
-    let isGazeHovered = false;
-
-    // Create a manual raycaster exactly from the camera's center to catch Phone VR gaze
-    if (meshRef.current) {
-      raycaster.current.setFromCamera(new THREE.Vector2(0, 0), camera);
-      const intersects = raycaster.current.intersectObject(meshRef.current);
-      if (intersects.length > 0) {
-        isGazeHovered = true;
-      }
-    }
-
-    const currentlyHovered = isGazeHovered || timeInfo.current.hovered;
-
-    if (currentlyHovered && !active) {
-      timeInfo.current.time += delta;
-      if (timeInfo.current.time >= DWELL_TIME) {
-        handleClick();
-      }
-    } else {
-      // Animate backwards if user looks away
-      timeInfo.current.time = Math.max(0, timeInfo.current.time - delta * 3);
-    }
-
-    // Visual updates outside of React state loop for ultra performance
-    if (progressRef.current) {
-      const p = Math.min(1, Math.max(0.001, timeInfo.current.time / DWELL_TIME));
-      progressRef.current.scale.x = p;
-    }
-
-    if (meshRef.current) {
-      const mat = meshRef.current.material as THREE.MeshBasicMaterial;
-      if (active) {
-        mat.color.set(color);
-      } else if (currentlyHovered) {
-        mat.color.set("#444444");
-      } else {
-        mat.color.set("#222222");
-      }
-    }
-  });
+  const bgColor = active ? color : hovered ? "#444444" : "#222222";
 
   return (
     <group position={position}>
-      <mesh
-        ref={meshRef}
-        onPointerEnter={() => { timeInfo.current.hovered = true; }}
-        onPointerLeave={() => { timeInfo.current.hovered = false; }}
-        onClick={handleClick}
+      <Interactive
+        onSelect={handleSelect}
+        onHover={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
       >
-        <planeGeometry args={[1.5, 0.4]} />
-        <meshBasicMaterial color={active ? color : "#222222"} transparent opacity={0.8} />
-      </mesh>
-
-      {/* Loading Progress Bar */}
-      <mesh ref={progressRef} position={[-0.75, -0.19, 0.01]}>
-        <planeGeometry ref={geomRef} args={[1.5, 0.02]} />
-        <meshBasicMaterial color="#00ffcc" transparent opacity={0.9} />
-      </mesh>
+        <mesh
+          ref={meshRef}
+          onClick={handleSelect}
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+        >
+          <planeGeometry args={[1.2, 0.3]} />
+          <meshBasicMaterial
+            color={bgColor}
+            transparent
+            opacity={0.85}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </Interactive>
 
       <Text
-        position={[0, 0, 0.02]}
-        fontSize={0.15}
-        color={active ? "white" : "#cccccc"}
+        position={[0, 0, 0.01]}
+        fontSize={0.12}
+        color={active ? "white" : hovered ? "#ffffff" : "#cccccc"}
         anchorX="center"
         anchorY="middle"
+        renderOrder={1}
       >
         {label}
       </Text>
+
+      {/* Active indicator bar */}
+      {active && (
+        <mesh position={[-0.6, 0, 0.01]}>
+          <planeGeometry args={[0.03, 0.25]} />
+          <meshBasicMaterial color={color} />
+        </mesh>
+      )}
     </group>
   );
 }
 
-function TimeSlider({ position }: { position: [number, number, number] }) {
+function TimeSliderVR({ position }: { position: [number, number, number] }) {
   const { timeScale, setTimeScale } = useStore();
 
   const handlePointerDown = (e: any) => {
     const u = e.uv?.x;
     if (u !== undefined) {
-      // u range [0, 1]. Map to [0, 40] scale (only forward time)
       let newScale = u * 40;
-      
-      // Fix snapping logic overlap
+
       if (newScale < 0.6) {
-        newScale = 0.0; // Snap to 0 (pauses Earth rotation completely)
+        newScale = 0.0;
       } else if (Math.abs(newScale - 1.0) < 0.6) {
-        newScale = 1.0; // Snap to normal time
+        newScale = 1.0;
       }
-      
+
       setTimeScale(newScale);
     }
   };
@@ -135,30 +93,39 @@ function TimeSlider({ position }: { position: [number, number, number] }) {
 
   return (
     <group position={position}>
-      <Text position={[0, 0.3, 0]} fontSize={0.16} color="#00ffcc" anchorX="center" anchorY="bottom">
-        ĐIỀU KHIỂN TỐC ĐỘ: {timeScale.toFixed(1)}x
+      <Text
+        position={[0, 0.22, 0]}
+        fontSize={0.09}
+        color="#00ffcc"
+        anchorX="center"
+        anchorY="bottom"
+      >
+        {`TOC DO: ${timeScale.toFixed(1)}x`}
       </Text>
 
       {/* Slider Track */}
-      <mesh onPointerDown={handlePointerDown} position={[0, 0, 0]}>
-        <planeGeometry args={[2.2, 0.3]} />
-        <meshBasicMaterial color="#111111" />
-      </mesh>
-      {/* Progress Bar inside track */}
-      <mesh position={[0, 0, 0.01]}>
-        <planeGeometry args={[2.0, 0.05]} />
+      <Interactive onSelect={() => {}}>
+        <mesh onPointerDown={handlePointerDown} position={[0, 0, 0]}>
+          <planeGeometry args={[1.6, 0.18]} />
+          <meshBasicMaterial color="#111111" side={THREE.DoubleSide} />
+        </mesh>
+      </Interactive>
+
+      {/* Progress Bar */}
+      <mesh position={[0, 0, 0.005]}>
+        <planeGeometry args={[1.4, 0.03]} />
         <meshBasicMaterial color="#555555" />
       </mesh>
 
-      {/* Marker Center (Normal Time = 1) */}
-      <mesh position={[((1.0 / 40) - 0.5) * 2.0, 0, 0.02]}>
-        <planeGeometry args={[0.02, 0.1]} />
+      {/* Marker for normal time (1x) */}
+      <mesh position={[((1.0 / 40) - 0.5) * 1.4, 0, 0.01]}>
+        <planeGeometry args={[0.015, 0.08]} />
         <meshBasicMaterial color="#aaaaaa" />
       </mesh>
 
-      {/* Slider Thumb */}
-      <mesh position={[(normalizedU - 0.5) * 2.0, 0, 0.03]}>
-        <circleGeometry args={[0.1, 32]} />
+      {/* Thumb */}
+      <mesh position={[(normalizedU - 0.5) * 1.4, 0, 0.015]}>
+        <circleGeometry args={[0.06, 32]} />
         <meshBasicMaterial color="#00ffcc" />
       </mesh>
     </group>
@@ -167,69 +134,125 @@ function TimeSlider({ position }: { position: [number, number, number] }) {
 
 export default function VRUI() {
   const { eventMode } = useStore();
-  const [isVisible, setIsVisible] = useState(true);
-  const rightController = useController('right');
-  const prevAPressed = useRef(false);
+  const { isMenuOpen, toggleMenu } = useStore();
+  const { camera } = useThree();
+  const groupRef = useRef<THREE.Group>(null);
+  const rightController = useController("right");
+  const prevBPressed = useRef(false);
 
+  // Toggle menu with B button (index 5) on right controller
   useFrame(() => {
     const gamepad = rightController?.inputSource?.gamepad;
     if (gamepad) {
-      // Nút A trên Quest thường ở gamepad.buttons[4]
-      const aPressed = gamepad.buttons[4]?.pressed || false;
-      if (aPressed && !prevAPressed.current) {
-        setIsVisible((v) => !v);
+      // B button = index 5, A button = index 4
+      const bPressed = gamepad.buttons[5]?.pressed || false;
+      if (bPressed && !prevBPressed.current) {
+        toggleMenu();
       }
-      prevAPressed.current = aPressed;
+      prevBPressed.current = bPressed;
+    }
+
+    // Make UI follow camera (head-locked)
+    if (groupRef.current) {
+      // Get camera world position and direction
+      const camPos = new THREE.Vector3();
+      const camDir = new THREE.Vector3();
+      camera.getWorldPosition(camPos);
+      camera.getWorldDirection(camDir);
+
+      // Place UI 2.5m in front of camera
+      const uiPos = camPos.clone().add(camDir.multiplyScalar(2.5));
+
+      // Smoothly interpolate position (lerp for smooth following)
+      groupRef.current.position.lerp(uiPos, 0.08);
+
+      // Make UI face the camera
+      groupRef.current.lookAt(camPos);
     }
   });
 
-  if (!isVisible) return null;
-
   const events: { id: EventMode; label: string; color: string }[] = [
-    { id: 'normal', label: 'Binh Thuong', color: '#6b7280' },
-    { id: 'solar_eclipse', label: 'Nhat Thuc', color: '#eab308' },
-    { id: 'lunar_eclipse', label: 'Nguyet Thuc', color: '#a855f7' },
-    { id: 'blood_moon', label: 'Trang Mau', color: '#ef4444' },
+    { id: "normal", label: "Binh Thuong", color: "#6b7280" },
+    { id: "solar_eclipse", label: "Nhat Thuc", color: "#eab308" },
+    { id: "lunar_eclipse", label: "Nguyet Thuc", color: "#a855f7" },
+    { id: "blood_moon", label: "Trang Mau", color: "#ef4444" },
   ];
 
   const eventDescriptions: Record<EventMode, string> = {
-    normal: "He Trai Dat va Mat Trang quay tu nhien tren quy dao cua minh.",
-    solar_eclipse: "Mat Trang nam giua Trai Dat va Mat Troi, che khuat anh sang va do bong den hoan toan len bề mặt Trai Dat.",
-    lunar_eclipse: "Trai Dat nam giua che khuat anh sang tu Mat Troi, khien Mat Trang chim hoan toan vao bong toi.",
-    blood_moon: "Trong Nguyet Thuc TOAN PHAN, anh sang xuyen qua khi quyen Trai Dat bi tan xa doi mau khien Mat Trang co mau do.",
+    normal:
+      "He Trai Dat va Mat Trang quay tu nhien tren quy dao cua minh.",
+    solar_eclipse:
+      "Mat Trang nam giua Trai Dat va Mat Troi, che khuat anh sang va do bong den hoan toan len be mat Trai Dat.",
+    lunar_eclipse:
+      "Trai Dat nam giua che khuat anh sang tu Mat Troi, khien Mat Trang chim hoan toan vao bong toi.",
+    blood_moon:
+      "Trong Nguyet Thuc TOAN PHAN, anh sang xuyen qua khi quyen Trai Dat bi tan xa doi mau khien Mat Trang co mau do.",
   };
 
+  if (!isMenuOpen) return null;
+
   return (
-    // Put UI completely to the right so it doesn't overlap the Earth. 
-    // The group in Scene.tsx is at Z=-5, so Z=0 relative is fine!
-    <group position={[4, 0, 0]} rotation={[0, -Math.PI / 8, 0]}>
+    <group ref={groupRef}>
+      {/* Background panel */}
+      <mesh position={[0, 0, -0.02]}>
+        <planeGeometry args={[1.6, 2.2]} />
+        <meshBasicMaterial
+          color="#0a0a0a"
+          transparent
+          opacity={0.9}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Border glow */}
+      <mesh position={[0, 0, -0.025]}>
+        <planeGeometry args={[1.64, 2.24]} />
+        <meshBasicMaterial
+          color="#00ffcc"
+          transparent
+          opacity={0.15}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
       {/* Title */}
-      <Text position={[0, 1, 0]} fontSize={0.25} color="white" anchorX="center" anchorY="middle">
+      <Text
+        position={[0, 0.85, 0]}
+        fontSize={0.14}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        fontWeight="bold"
+      >
         MENU SU KIEN
       </Text>
 
+      {/* Divider line under title */}
+      <mesh position={[0, 0.72, 0.001]}>
+        <planeGeometry args={[1.3, 0.005]} />
+        <meshBasicMaterial color="#00ffcc" transparent opacity={0.5} />
+      </mesh>
+
+      {/* Event buttons */}
       {events.map((evt, idx) => (
-        <VRButton
+        <VRMenuButton
           key={evt.id}
           modeId={evt.id}
           label={evt.label}
           color={evt.color}
-          position={[0, 0.4 - idx * 0.45, 0]}
+          position={[0, 0.5 - idx * 0.35, 0]}
           active={eventMode === evt.id}
         />
       ))}
 
-      <TimeSlider position={[0, -1.8, 0]} />
+      {/* Time Slider */}
+      <TimeSliderVR position={[0, -0.95, 0]} />
 
       {/* Description Panel */}
-      <group position={[0, -2.8, 0]}>
-        <mesh position={[0, 0, -0.01]}>
-          <planeGeometry args={[2.5, 1.2]} />
-          <meshBasicMaterial color="#111111" transparent opacity={0.8} />
-        </mesh>
+      <group position={[0, -0.55, 0]}>
         <Text
-          position={[0, 0.4, 0]}
-          fontSize={0.14}
+          position={[0, -0.68, 0]}
+          fontSize={0.08}
           color="#00ffcc"
           anchorX="center"
           anchorY="top"
@@ -237,11 +260,11 @@ export default function VRUI() {
           THONG TIN
         </Text>
         <Text
-          position={[0, 0.1, 0]}
-          fontSize={0.11}
+          position={[0, -0.78, 0]}
+          fontSize={0.065}
           lineHeight={1.5}
           color="#cccccc"
-          maxWidth={2.2}
+          maxWidth={1.3}
           textAlign="center"
           anchorX="center"
           anchorY="top"
@@ -249,6 +272,17 @@ export default function VRUI() {
           {eventDescriptions[eventMode]}
         </Text>
       </group>
+
+      {/* Close hint */}
+      <Text
+        position={[0, -0.98, 0]}
+        fontSize={0.06}
+        color="#666666"
+        anchorX="center"
+        anchorY="middle"
+      >
+        [Nhan B de dong]
+      </Text>
     </group>
   );
 }

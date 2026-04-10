@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useController, useXR } from "@react-three/xr";
 import * as THREE from "three";
-import { useStore } from "@/store/useStore";
+
 
 // Meta Quest 3 Controller button mapping:
 // buttons[0] = Trigger (index finger)
@@ -24,7 +24,7 @@ export default function VRControllerInteraction({
   const { isPresenting } = useXR();
   const leftController = useController("left");
   const rightController = useController("right");
-  const { toggleMenu } = useStore();
+
 
   const scaleRef = useRef(1.0);
 
@@ -32,7 +32,7 @@ export default function VRControllerInteraction({
   const rightState = useRef({
     prevTriggerPressed: false,
     prevGripPressed: false,
-    prevAPressed: false,
+
     lastGripPos: new THREE.Vector3(),
     lastTriggerPos: new THREE.Vector3(),
   });
@@ -69,13 +69,6 @@ export default function VRControllerInteraction({
       // Get current world position of right grip
       const rightPos = tempVec.current;
       grip.getWorldPosition(rightPos);
-
-      // --- Button A: Toggle Menu (button index 4) ---
-      const aPressed = rightGamepad.buttons[4]?.pressed || false;
-      if (aPressed && !rightState.current.prevAPressed) {
-        toggleMenu();
-      }
-      rightState.current.prevAPressed = aPressed;
 
       // --- Thumbstick: Zoom (Y axis) & Rotate (X axis) ---
       // Quest 3 thumbstick axes are at index 2 (X) and 3 (Y)
