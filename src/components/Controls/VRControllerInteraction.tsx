@@ -1,131 +1,233 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { useXR } from "@react-three/xr";
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useController, useXR } from "@react-three/xr";
 import * as THREE from "three";
 import { useStore } from "@/store/useStore";
 
-export default function VRControllerInteraction({ targetRef }: { targetRef: React.RefObject<THREE.Group> }) {
-  const { controllers, isPresenting } = useXR();
+// Meta Quest 3 Controller button mapping:
+// buttons[0] = Trigger (index finger)
+// buttons[1] = Grip/Squeeze (middle finger)
+// buttons[2] = unused
+// buttons[3] = Thumbstick press
+// buttons[4] = A/X button
+// buttons[5] = B/Y button
+// axes[2] = Thumbstick X
+// axes[3] = Thumbstick Y
+
+export default function VRControllerInteraction({
+  targetRef,
+}: {
+  targetRef: React.RefObject<THREE.Group>;
+}) {
+  const { isPresenting } = useXR();
+  const leftController = useController("left");
+  const rightController = useController("right");
   const { toggleMenu } = useStore();
-  const rotationRef = useRef({ x: 0, y: 0 });
+
   const scaleRef = useRef(1.0);
-  const controllerStateRef = useRef<{
-    [controllerIdx: number]: {
-      lastPos: THREE.Vector3 | null;
-      lastPosTrigger: THREE.Vector3 | null;
-      gripPressed: boolean;
-      triggerPressed: boolean;
-      buttonAPressed: boolean;
-    };
-  }>({});
+
+  // State tracking for right controller
+  const rightState = useRef({
+    prevTriggerPressed: false,
+    prevGripPressed: false,
+    prevAPressed: false,
+    lastGripPos: new THREE.Vector3(),
+    lastTriggerPos: new THREE.Vector3(),
+  });
+
+  // State tracking for left controller
+  const leftState = useRef({
+    prevTriggerPressed: false,
+    prevGripPressed: false,
+    lastGripPos: new THREE.Vector3(),
+    lastTriggerPos: new THREE.Vector3(),
+  });
+
+  // Pinch-to-zoom state (using both controllers)
+  const pinchState = useRef({
+    active: false,
+    lastDistance: 0,
+  });
+
+  const tempVec = useRef(new THREE.Vector3());
+  const tempVec2 = useRef(new THREE.Vector3());
 
   useFrame(() => {
-    if (!isPresenting || controllers.length < 1) return;
+    if (!isPresenting || !targetRef.current) return;
 
-    controllers.forEach((controller, idx) => {
-      if (!controller) return;
+    const rightGamepad = rightController?.inputSource?.gamepad;
+    const leftGamepad = leftController?.inputSource?.gamepad;
 
-      const input = controller.inputSource?.gamepad;
-      if (!input) return;
+    // ==========================================
+    // RIGHT CONTROLLER
+    // ==========================================
+    if (rightController && rightGamepad) {
+      const grip = rightController.grip;
 
-      // Initialize state for this controller if not exists
-      if (!controllerStateRef.current[idx]) {
-        controllerStateRef.current[idx] = {
-          lastPos: null,
-          lastPosTrigger: null,
-          gripPressed: false,
-          triggerPressed: false,
-          buttonAPressed: false,
-        };
-      }
+      // Get current world position of right grip
+      const rightPos = tempVec.current;
+      grip.getWorldPosition(rightPos);
 
-      const state = controllerStateRef.current[idx];
-
-      // ===== Button A (toggle menu) =====
-      // Button A is typically at index 4
-      const buttonAPressed = input.buttons[4]?.pressed || false;
-      
-      // Detect button A press (transition from not pressed to pressed)
-      if (buttonAPressed && !state.buttonAPressed) {
+      // --- Button A: Toggle Menu (button index 4) ---
+      const aPressed = rightGamepad.buttons[4]?.pressed || false;
+      if (aPressed && !rightState.current.prevAPressed) {
         toggleMenu();
       }
-      state.buttonAPressed = buttonAPressed;
+      rightState.current.prevAPressed = aPressed;
 
-      // ===== Thumbstick rotation =====
-      if (input.axes.length >= 2) {
-        rotationRef.current.x += input.axes[0] * 0.02;
-        rotationRef.current.y += input.axes[1] * 0.02;
+      // --- Thumbstick: Zoom (Y axis) & Rotate (X axis) ---
+      // Quest 3 thumbstick axes are at index 2 (X) and 3 (Y)
+      const thumbX = rightGamepad.axes[2] ?? rightGamepad.axes[0] ?? 0;
+      const thumbY = rightGamepad.axes[3] ?? rightGamepad.axes[1] ?? 0;
+
+      // Deadzone
+      if (Math.abs(thumbY) > 0.15) {
+        // Push forward (negative Y) = zoom in, pull back (positive Y) = zoom out
+        scaleRef.current += (-thumbY) * 0.03;
+        scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
       }
 
-      // ===== Trigger button + drag to zoom =====
-      // Button 0 is typically the trigger button
-      const triggerPressed = input.buttons[0]?.pressed || false;
-      
+      if (Math.abs(thumbX) > 0.15) {
+        targetRef.current.rotation.y += thumbX * 0.03;
+      }
+
+      // --- Trigger (button 0): Hold + drag to zoom ---
+      const triggerPressed = rightGamepad.buttons[0]?.pressed || false;
       if (triggerPressed) {
-        if (!state.triggerPressed) {
-          // Trigger just pressed - save starting position
-          state.lastPosTrigger = controller.position.clone();
-        } else if (state.lastPosTrigger) {
-          // Trigger held - calculate delta and zoom
-          const currentPos = controller.position;
-          // Calculate movement primarily along Y (vertical map to zoom) and Z (push/pull map to zoom)
-          // We'll use pull down or towards yourself to zoom out, push up/away to zoom in
-          const deltaY = currentPos.y - state.lastPosTrigger.y;
-          const deltaZ = currentPos.z - state.lastPosTrigger.z;
-          
-          // Z axis in VR is negative forward. So -deltaZ is moving forward.
-          // Add Y movement (up) as zoom in too.
+        if (!rightState.current.prevTriggerPressed) {
+          // Just pressed - save initial position
+          rightState.current.lastTriggerPos.copy(rightPos);
+        } else {
+          // Held - calculate movement delta
+          const deltaY = rightPos.y - rightState.current.lastTriggerPos.y;
+          const deltaZ = rightPos.z - rightState.current.lastTriggerPos.z;
+
+          // Moving hand up or pushing forward = zoom in
           const movement = deltaY - deltaZ;
-          
-          scaleRef.current += movement * 2.5; // Sensitivity
-          
-          // Clamp scale to reasonable limits
+          scaleRef.current += movement * 3.0;
           scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
-          
-          // Update position for next frame
-          state.lastPosTrigger = currentPos.clone();
-        }
-      } else {
-        // Trigger released
-        state.lastPosTrigger = null;
-      }
-      state.triggerPressed = triggerPressed;
 
-      // ===== Grip button + drag to rotate =====
-      // Button 1 is typically the grip button
-      const gripPressed = input.buttons[1]?.pressed || false;
-      
+          rightState.current.lastTriggerPos.copy(rightPos);
+        }
+      }
+      rightState.current.prevTriggerPressed = triggerPressed;
+
+      // --- Grip (button 1): Hold + drag to rotate ---
+      const gripPressed = rightGamepad.buttons[1]?.pressed || false;
       if (gripPressed) {
-        if (!state.gripPressed) {
-          // Grip just pressed - save starting position
-          state.lastPos = controller.position.clone();
-        } else if (state.lastPos) {
-          // Grip held - calculate delta and rotate
-          const currentPos = controller.position;
-          const deltaX = currentPos.x - state.lastPos.x;
-          const deltaY = currentPos.y - state.lastPos.y;
-          
-          // Apply rotation based on movement
-          rotationRef.current.x += deltaX * 1.5;
-          rotationRef.current.y -= deltaY * 1.5;
-          
-          // Update position for next frame
-          state.lastPos = currentPos.clone();
+        if (!rightState.current.prevGripPressed) {
+          rightState.current.lastGripPos.copy(rightPos);
+        } else {
+          const deltaX = rightPos.x - rightState.current.lastGripPos.x;
+          const deltaY = rightPos.y - rightState.current.lastGripPos.y;
+
+          targetRef.current.rotation.y += deltaX * 2.0;
+          targetRef.current.rotation.x -= deltaY * 2.0;
+
+          rightState.current.lastGripPos.copy(rightPos);
         }
-      } else {
-        // Grip released
-        state.lastPos = null;
+      }
+      rightState.current.prevGripPressed = gripPressed;
+    }
+
+    // ==========================================
+    // LEFT CONTROLLER
+    // ==========================================
+    if (leftController && leftGamepad) {
+      const grip = leftController.grip;
+      const leftPos = tempVec2.current;
+      grip.getWorldPosition(leftPos);
+
+      // --- Left Thumbstick: Zoom (Y) & Rotate (X) ---
+      const thumbX = leftGamepad.axes[2] ?? leftGamepad.axes[0] ?? 0;
+      const thumbY = leftGamepad.axes[3] ?? leftGamepad.axes[1] ?? 0;
+
+      if (Math.abs(thumbY) > 0.15) {
+        scaleRef.current += (-thumbY) * 0.03;
+        scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
       }
 
-      state.gripPressed = gripPressed;
-    });
+      if (Math.abs(thumbX) > 0.15) {
+        targetRef.current.rotation.y += thumbX * 0.03;
+      }
 
-    // Apply rotation and scale to the scene's target group
+      // --- Trigger (button 0): Hold + drag to zoom ---
+      const triggerPressed = leftGamepad.buttons[0]?.pressed || false;
+      if (triggerPressed) {
+        if (!leftState.current.prevTriggerPressed) {
+          leftState.current.lastTriggerPos.copy(leftPos);
+        } else {
+          const deltaY = leftPos.y - leftState.current.lastTriggerPos.y;
+          const deltaZ = leftPos.z - leftState.current.lastTriggerPos.z;
+
+          const movement = deltaY - deltaZ;
+          scaleRef.current += movement * 3.0;
+          scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
+
+          leftState.current.lastTriggerPos.copy(leftPos);
+        }
+      }
+      leftState.current.prevTriggerPressed = triggerPressed;
+
+      // --- Grip (button 1): Hold + drag to rotate ---
+      const gripPressed = leftGamepad.buttons[1]?.pressed || false;
+      if (gripPressed) {
+        if (!leftState.current.prevGripPressed) {
+          leftState.current.lastGripPos.copy(leftPos);
+        } else {
+          const deltaX = leftPos.x - leftState.current.lastGripPos.x;
+          const deltaY = leftPos.y - leftState.current.lastGripPos.y;
+
+          targetRef.current.rotation.y += deltaX * 2.0;
+          targetRef.current.rotation.x -= deltaY * 2.0;
+
+          leftState.current.lastGripPos.copy(leftPos);
+        }
+      }
+      leftState.current.prevGripPressed = gripPressed;
+    }
+
+    // ==========================================
+    // TWO-HANDED PINCH TO ZOOM
+    // ==========================================
+    if (rightController && leftController && rightGamepad && leftGamepad) {
+      const rightGripPressed = rightGamepad.buttons[1]?.pressed || false;
+      const leftGripPressed = leftGamepad.buttons[1]?.pressed || false;
+
+      if (rightGripPressed && leftGripPressed) {
+        // Both grips held - pinch to zoom
+        const rightPos = new THREE.Vector3();
+        const leftPos = new THREE.Vector3();
+        rightController.grip.getWorldPosition(rightPos);
+        leftController.grip.getWorldPosition(leftPos);
+
+        const currentDistance = rightPos.distanceTo(leftPos);
+
+        if (!pinchState.current.active) {
+          // Just started pinching
+          pinchState.current.active = true;
+          pinchState.current.lastDistance = currentDistance;
+        } else {
+          // Update scale based on distance change
+          const delta = currentDistance - pinchState.current.lastDistance;
+          scaleRef.current += delta * 3.0;
+          scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
+
+          pinchState.current.lastDistance = currentDistance;
+        }
+      } else {
+        pinchState.current.active = false;
+      }
+    } else {
+      pinchState.current.active = false;
+    }
+
+    // ==========================================
+    // APPLY SCALE
+    // ==========================================
     if (targetRef.current) {
-      targetRef.current.rotation.y = rotationRef.current.x;
-      targetRef.current.rotation.x = rotationRef.current.y;
       targetRef.current.scale.setScalar(scaleRef.current);
     }
   });
