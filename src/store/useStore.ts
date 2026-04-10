@@ -7,6 +7,8 @@ interface AppState {
   setEventMode: (mode: EventMode) => void;
   timeScale: number;
   setTimeScale: (scale: number) => void;
+  isMenuOpen: boolean;
+  toggleMenu: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -14,4 +16,6 @@ export const useStore = create<AppState>((set) => ({
   setEventMode: (mode) => set({ eventMode: mode }),
   timeScale: 1.0,
   setTimeScale: (scale) => set({ timeScale: scale }),
+  isMenuOpen: false,
+  toggleMenu: () => set((state) => ({ isMenuOpen: !state.isMenuOpen })),
 }));
