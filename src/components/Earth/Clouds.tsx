@@ -4,6 +4,7 @@ import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { SUN_POSITION } from "./Earth";
+import { useStore } from "@/store/useStore";
 
 interface CloudsProps {
   cloudsMap: THREE.Texture | null;
@@ -24,9 +25,13 @@ export default function Clouds({ cloudsMap }: CloudsProps) {
     uniforms.cloudsTexture.value = cloudsMap;
   }, [cloudsMap, uniforms]);
 
-  useFrame(({ clock }) => {
+  const { timeScale } = useStore();
+  const cloudsRotationRef = useRef(0);
+
+  useFrame((_, delta) => {
+    cloudsRotationRef.current += delta * 0.06 * timeScale;
     if (cloudsRef.current) {
-      cloudsRef.current.rotation.y = clock.getElapsedTime() * 0.06;
+      cloudsRef.current.rotation.y = cloudsRotationRef.current;
     }
   });
 

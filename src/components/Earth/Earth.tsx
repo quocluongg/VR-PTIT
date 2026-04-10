@@ -5,6 +5,10 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import Clouds from "./Clouds";
 import Atmosphere from "./Atmosphere";
+import { useStore } from "@/store/useStore";
+
+import Hotspots from "./Hotspots";
+import ISS from "../Space/ISS";
 
 // Sun world-space position — shared with Clouds.tsx, Sun.tsx, Moon.tsx
 export const SUN_POSITION = new THREE.Vector3(20, 10, -50);
@@ -36,17 +40,18 @@ export default function Earth() {
   useEffect(() => { uniforms.dayTexture.value   = dayMap;   }, [dayMap,   uniforms]);
   useEffect(() => { uniforms.nightTexture.value = nightMap; }, [nightMap, uniforms]);
 
+  const { timeScale } = useStore();
+  const earthRotationRef = useRef(0);
+
   // ── Earth rotation ────────────────────────────────────────────────────────
-  useFrame(({ clock }) => {
+  useFrame((_, delta) => {
+    earthRotationRef.current += delta * 0.05 * timeScale;
     if (earthRef.current) {
-      earthRef.current.rotation.y = clock.getElapsedTime() * 0.05;
+      earthRef.current.rotation.y = earthRotationRef.current;
     }
   });
 
   // ── GLSL shaders ──────────────────────────────────────────────────────────
-  // NOTE: We CANNOT use inverse()/transpose() in WebGL 1.0 GLSL.
-  // Since Earth is a uniform-scale sphere, mat3(modelMatrix)*normal is equivalent
-  // to the full inverse-transpose form and is safe to use.
   const vertexShader = /* glsl */`
     varying vec2 vUv;
     varying vec3 vWorldNormal;
@@ -54,14 +59,9 @@ export default function Earth() {
 
     void main() {
       vUv = uv;
-
-      // World-space normal — valid for uniform-scale objects (sphere)
-      // Avoids inverse()/transpose() which are not in WebGL 1.0 GLSL
       vWorldNormal = normalize(mat3(modelMatrix) * normal);
-
       vec4 worldPos = modelMatrix * vec4(position, 1.0);
       vWorldPosition = worldPos.xyz;
-
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `;
@@ -76,23 +76,14 @@ export default function Earth() {
     varying vec3 vWorldPosition;
 
     void main() {
-      // World-space direction from surface point → Sun
       vec3 sunDir = normalize(sunPosition - vWorldPosition);
-
-      // +1 = fully lit (day), -1 = fully dark (night)
       float NdotL = dot(vWorldNormal, sunDir);
-
-      // Smooth terminator band (dawn / dusk)
       float dayFactor = smoothstep(-0.12, 0.12, NdotL);
 
       vec4 dayColor   = texture2D(dayTexture,   vUv);
       vec4 nightColor = texture2D(nightTexture, vUv);
 
-      // Blend day ↔ night. On night-side, multiply by 1.5 to make
-      // city lights pop; on day-side use full day texture.
       vec4 color = mix(nightColor * 1.5, dayColor, dayFactor);
-
-      // Subtle specular shimmer on ocean (day side)
       float spec = pow(max(0.0, NdotL), 48.0) * 0.3 * dayFactor;
       color.rgb += vec3(0.3, 0.5, 1.0) * spec;
 
@@ -115,6 +106,8 @@ export default function Earth() {
         ) : (
           <meshStandardMaterial color="#1a5b82" />
         )}
+        <Hotspots />
+        <ISS />
       </mesh>
       
       {/* Invisible shadow receiver shell slightly larger than Earth's surface */}
