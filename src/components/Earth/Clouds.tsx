@@ -32,6 +32,11 @@ export default function Clouds({ cloudsMap }: CloudsProps) {
     cloudsRotationRef.current += delta * 0.06 * timeScale;
     if (cloudsRef.current) {
       cloudsRef.current.rotation.y = cloudsRotationRef.current;
+      
+      const parentGroup = cloudsRef.current.parent?.parent;
+      if (parentGroup) {
+        uniforms.sunPosition.value.copy(SUN_POSITION).applyMatrix4(parentGroup.matrixWorld);
+      }
     }
   });
 

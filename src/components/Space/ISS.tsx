@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { Html } from "@react-three/drei";
+import { Billboard, Text } from "@react-three/drei";
 import { Interactive } from "@react-three/xr";
 
 function latLongToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
@@ -99,17 +99,68 @@ export default function ISS() {
       </Interactive>
       
       {hovered && (
-        <Html distanceFactor={2} position={[0, 0.1, 0]} center zIndexRange={[100, 0]}>
-          <div className="bg-blue-900/90 text-white p-3 rounded shadow-lg border border-yellow-400 w-56 pointer-events-none select-none">
-            <h3 className="font-bold text-lg text-yellow-300 m-0">Trạm ISS</h3>
-            <div className="text-sm mt-2 grids grids-cols-2 gap-1">
-              <div><strong>Vĩ độ:</strong> {data.lat.toFixed(2)}°</div>
-              <div><strong>Kinh độ:</strong> {data.lon.toFixed(2)}°</div>
-              <div><strong>Độ cao:</strong> {data.alt.toFixed(0)} km</div>
-              <div><strong>Vận tốc:</strong> {data.vel.toFixed(0)} km/h</div>
-            </div>
-          </div>
-        </Html>
+        <Billboard position={[0, 0.15, 0]}>
+          <group>
+            {/* Background Panel */}
+            <mesh position={[0, 0, -0.001]}>
+              <planeGeometry args={[0.42, 0.22]} />
+              <meshBasicMaterial color="#0b1b3d" transparent opacity={0.9} />
+            </mesh>
+            {/* Border */}
+            <mesh position={[0, 0, -0.002]}>
+              <planeGeometry args={[0.43, 0.23]} />
+              <meshBasicMaterial color="#facc15" />
+            </mesh>
+            {/* Title */}
+            <Text
+              position={[0, 0.07, 0]}
+              fontSize={0.045}
+              color="#facc15"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight="bold"
+            >
+              Trạm ISS
+            </Text>
+            {/* Content data */}
+            <Text
+              position={[-0.18, 0.01, 0]}
+              fontSize={0.022}
+              color="#ffffff"
+              anchorX="left"
+              anchorY="middle"
+            >
+              {`Vĩ độ: ${data.lat.toFixed(2)}°`}
+            </Text>
+            <Text
+              position={[0.02, 0.01, 0]}
+              fontSize={0.022}
+              color="#ffffff"
+              anchorX="left"
+              anchorY="middle"
+            >
+              {`Kinh độ: ${data.lon.toFixed(2)}°`}
+            </Text>
+            <Text
+              position={[-0.18, -0.04, 0]}
+              fontSize={0.022}
+              color="#ffffff"
+              anchorX="left"
+              anchorY="middle"
+            >
+              {`Độ cao: ${data.alt.toFixed(0)} km`}
+            </Text>
+            <Text
+              position={[0.02, -0.04, 0]}
+              fontSize={0.022}
+              color="#ffffff"
+              anchorX="left"
+              anchorY="middle"
+            >
+              {`Vận tốc: ${data.vel.toFixed(0)} km/h`}
+            </Text>
+          </group>
+        </Billboard>
       )}
     </group>
   );
