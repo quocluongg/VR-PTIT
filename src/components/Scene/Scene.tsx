@@ -9,9 +9,12 @@ import Moon from "@/components/Space/Moon";
 import Sun from "@/components/Space/Sun";
 import VRUI from "@/components/UI/VRUI";
 import VRCursor from "@/components/UI/VRCursor";
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
+import * as THREE from "three";
+import VRControllerInteraction from "@/components/Controls/VRControllerInteraction";
 
 export default function Scene() {
+  const universeRef = useRef<THREE.Group>(null);
   return (
     <>
       <VRButton />
@@ -27,8 +30,7 @@ export default function Scene() {
           <color attach="background" args={["#000000"]} />
           <ambientLight intensity={0.15} />
           
-          {/* We offset the universe in Z so the user in VR (who starts at 0,0,0) is correctly distanced from the Earth */}
-          <group position={[0, 0, -5]}>
+          <group position={[0, 0, -5]} ref={universeRef}>
             <Suspense fallback={null}>
               <Sun />
               <Earth />
@@ -37,6 +39,8 @@ export default function Scene() {
               <VRUI />
             </Suspense>
           </group>
+
+          <VRControllerInteraction targetRef={universeRef} />
 
           <OrbitControls
             target={[0, 0, -5]}

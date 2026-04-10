@@ -41,7 +41,7 @@ function HotspotPin({ city }: { city: typeof CITIES[0] }) {
           onPointerOut={() => setHovered(false)}
           onClick={() => setHovered(!hovered)}
         >
-          <sphereGeometry args={[0.01, 16, 16]} />
+          <sphereGeometry args={[0.02, 16, 16]} />
           <meshBasicMaterial color={hovered ? "#ff0088" : "#00ffcc"} />
         </mesh>
       </Interactive>

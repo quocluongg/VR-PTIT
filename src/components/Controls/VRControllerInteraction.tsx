@@ -6,13 +6,11 @@ import { useXR } from "@react-three/xr";
 import * as THREE from "three";
 import { useStore } from "@/store/useStore";
 
-export default function VRControllerInteraction() {
+export default function VRControllerInteraction({ targetRef }: { targetRef: React.RefObject<THREE.Group> }) {
   const { controllers, isPresenting } = useXR();
   const { toggleMenu } = useStore();
   const rotationRef = useRef({ x: 0, y: 0 });
   const scaleRef = useRef(1.0);
-  const { camera } = useThree();
-  const targetGroupRef = useRef<THREE.Group | null>(null);
   const controllerStateRef = useRef<{
     [controllerIdx: number]: {
       lastPos: THREE.Vector3 | null;
@@ -22,14 +20,6 @@ export default function VRControllerInteraction() {
       buttonAPressed: boolean;
     };
   }>({});
-
-  // Get the target group from the scene
-  useEffect(() => {
-    const targetGroup = camera.parent;
-    if (targetGroup) {
-      targetGroupRef.current = targetGroup as THREE.Group;
-    }
-  }, [camera]);
 
   useFrame(() => {
     if (!isPresenting || controllers.length < 1) return;
@@ -133,10 +123,10 @@ export default function VRControllerInteraction() {
     });
 
     // Apply rotation and scale to the scene's target group
-    if (targetGroupRef.current) {
-      targetGroupRef.current.rotation.y = rotationRef.current.x;
-      targetGroupRef.current.rotation.x = rotationRef.current.y;
-      targetGroupRef.current.scale.setScalar(scaleRef.current);
+    if (targetRef.current) {
+      targetRef.current.rotation.y = rotationRef.current.x;
+      targetRef.current.rotation.x = rotationRef.current.y;
+      targetRef.current.scale.setScalar(scaleRef.current);
     }
   });
 
