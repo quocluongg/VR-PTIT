@@ -48,6 +48,11 @@ export default function Earth() {
     earthRotationRef.current += delta * 0.05 * timeScale;
     if (earthRef.current) {
       earthRef.current.rotation.y = earthRotationRef.current;
+      
+      const parentGroup = earthRef.current.parent?.parent;
+      if (parentGroup) {
+        uniforms.sunPosition.value.copy(SUN_POSITION).applyMatrix4(parentGroup.matrixWorld);
+      }
     }
   });
 

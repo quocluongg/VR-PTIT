@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import * as THREE from "three";
-import { Html } from "@react-three/drei";
+import { Billboard, Text } from "@react-three/drei";
 import { Interactive } from "@react-three/xr";
 
 // Chuyển đổi Vĩ độ (Lat) và Kinh độ (Lon) sang tọa độ 3D trên mặt cầu (Bán kính = 1)
@@ -28,7 +28,8 @@ const CITIES = [
 function HotspotPin({ city }: { city: typeof CITIES[0] }) {
   const [hovered, setHovered] = useState(false);
   const position = useMemo(() => latLongToVector3(city.lat, city.lon, 1.02), [city]);
-
+  
+  // Custom rotation isn't needed for Billboard, but position is relative to parent group
   return (
     <group position={position}>
       <Interactive
@@ -47,12 +48,42 @@ function HotspotPin({ city }: { city: typeof CITIES[0] }) {
       </Interactive>
 
       {hovered && (
-        <Html distanceFactor={2} position={[0, 0.05, 0]} center zIndexRange={[100, 0]}>
-          <div className="bg-black/80 text-white p-3 rounded shadow-lg border border-cyan-500 w-48 pointer-events-none select-none">
-            <h3 className="font-bold text-lg text-cyan-400 m-0">{city.name}</h3>
-            <p className="text-sm m-0 mt-1">{city.info}</p>
-          </div>
-        </Html>
+        <Billboard position={[0, 0.1, 0]}>
+          <group>
+            {/* Background Panel */}
+            <mesh position={[0, 0, -0.001]}>
+              <planeGeometry args={[0.35, 0.15]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.8} />
+            </mesh>
+            {/* Border */}
+            <mesh position={[0, 0, -0.002]}>
+              <planeGeometry args={[0.36, 0.16]} />
+              <meshBasicMaterial color="#00ffcc" />
+            </mesh>
+            {/* Text content */}
+            <Text
+              position={[0, 0.025, 0]}
+              fontSize={0.04}
+              color="#00ffcc"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight="bold"
+            >
+              {city.name}
+            </Text>
+            <Text
+              position={[0, -0.025, 0]}
+              fontSize={0.02}
+              color="#ffffff"
+              anchorX="center"
+              anchorY="middle"
+              maxWidth={0.32}
+              textAlign="center"
+            >
+              {city.info}
+            </Text>
+          </group>
+        </Billboard>
       )}
     </group>
   );
