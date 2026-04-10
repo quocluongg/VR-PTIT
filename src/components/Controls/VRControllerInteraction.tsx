@@ -10,12 +10,15 @@ export default function VRControllerInteraction() {
   const { controllers, isPresenting } = useXR();
   const { toggleMenu } = useStore();
   const rotationRef = useRef({ x: 0, y: 0 });
+  const scaleRef = useRef(1.0);
   const { camera } = useThree();
   const targetGroupRef = useRef<THREE.Group | null>(null);
   const controllerStateRef = useRef<{
     [controllerIdx: number]: {
       lastPos: THREE.Vector3 | null;
+      lastPosTrigger: THREE.Vector3 | null;
       gripPressed: boolean;
+      triggerPressed: boolean;
       buttonAPressed: boolean;
     };
   }>({});
@@ -41,7 +44,9 @@ export default function VRControllerInteraction() {
       if (!controllerStateRef.current[idx]) {
         controllerStateRef.current[idx] = {
           lastPos: null,
+          lastPosTrigger: null,
           gripPressed: false,
+          triggerPressed: false,
           buttonAPressed: false,
         };
       }
@@ -63,6 +68,40 @@ export default function VRControllerInteraction() {
         rotationRef.current.x += input.axes[0] * 0.02;
         rotationRef.current.y += input.axes[1] * 0.02;
       }
+
+      // ===== Trigger button + drag to zoom =====
+      // Button 0 is typically the trigger button
+      const triggerPressed = input.buttons[0]?.pressed || false;
+      
+      if (triggerPressed) {
+        if (!state.triggerPressed) {
+          // Trigger just pressed - save starting position
+          state.lastPosTrigger = controller.position.clone();
+        } else if (state.lastPosTrigger) {
+          // Trigger held - calculate delta and zoom
+          const currentPos = controller.position;
+          // Calculate movement primarily along Y (vertical map to zoom) and Z (push/pull map to zoom)
+          // We'll use pull down or towards yourself to zoom out, push up/away to zoom in
+          const deltaY = currentPos.y - state.lastPosTrigger.y;
+          const deltaZ = currentPos.z - state.lastPosTrigger.z;
+          
+          // Z axis in VR is negative forward. So -deltaZ is moving forward.
+          // Add Y movement (up) as zoom in too.
+          const movement = deltaY - deltaZ;
+          
+          scaleRef.current += movement * 2.5; // Sensitivity
+          
+          // Clamp scale to reasonable limits
+          scaleRef.current = Math.max(0.2, Math.min(scaleRef.current, 5.0));
+          
+          // Update position for next frame
+          state.lastPosTrigger = currentPos.clone();
+        }
+      } else {
+        // Trigger released
+        state.lastPosTrigger = null;
+      }
+      state.triggerPressed = triggerPressed;
 
       // ===== Grip button + drag to rotate =====
       // Button 1 is typically the grip button
@@ -93,10 +132,11 @@ export default function VRControllerInteraction() {
       state.gripPressed = gripPressed;
     });
 
-    // Apply rotation to the scene's target group
+    // Apply rotation and scale to the scene's target group
     if (targetGroupRef.current) {
       targetGroupRef.current.rotation.y = rotationRef.current.x;
       targetGroupRef.current.rotation.x = rotationRef.current.y;
+      targetGroupRef.current.scale.setScalar(scaleRef.current);
     }
   });
 
