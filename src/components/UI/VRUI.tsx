@@ -132,6 +132,10 @@ function TimeSliderVR({ position }: { position: [number, number, number] }) {
   );
 }
 
+const tempPos = new THREE.Vector3();
+const tempDir = new THREE.Vector3();
+const tempUiPos = new THREE.Vector3();
+
 export default function VRUI() {
   const { eventMode } = useStore();
   const { isMenuOpen, toggleMenu } = useStore();
@@ -152,22 +156,20 @@ export default function VRUI() {
       prevBPressed.current = bPressed;
     }
 
-    // Make UI follow camera (head-locked)
-    if (groupRef.current) {
+    // Make UI follow camera (head-locked) ONLY if open
+    if (groupRef.current && isMenuOpen) {
       // Get camera world position and direction
-      const camPos = new THREE.Vector3();
-      const camDir = new THREE.Vector3();
-      camera.getWorldPosition(camPos);
-      camera.getWorldDirection(camDir);
+      camera.getWorldPosition(tempPos);
+      camera.getWorldDirection(tempDir);
 
       // Place UI 2.5m in front of camera
-      const uiPos = camPos.clone().add(camDir.multiplyScalar(2.5));
+      tempUiPos.copy(tempPos).add(tempDir.multiplyScalar(2.5));
 
       // Smoothly interpolate position (lerp for smooth following)
-      groupRef.current.position.lerp(uiPos, 0.08);
+      groupRef.current.position.lerp(tempUiPos, 0.08);
 
       // Make UI face the camera
-      groupRef.current.lookAt(camPos);
+      groupRef.current.lookAt(tempPos);
     }
   });
 
@@ -189,10 +191,8 @@ export default function VRUI() {
       "Trong Nguyet Thuc TOAN PHAN, anh sang xuyen qua khi quyen Trai Dat bi tan xa doi mau khien Mat Trang co mau do.",
   };
 
-  if (!isMenuOpen) return null;
-
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} visible={isMenuOpen}>
       {/* Background panel */}
       <mesh position={[0, 0, -0.02]}>
         <planeGeometry args={[1.6, 2.2]} />
